@@ -47,28 +47,46 @@ cask "gcloud-cli" do
   end
 
   postflight do
-    # HACK: Allow existing shell profiles to work by linking the current version to the `latest` directory.
+    # Allow existing shell profiles to work by linking the current version to the `latest` directory.
     unless (latest_path = staged_path.dirname/"latest").directory?
       FileUtils.ln_s staged_path, latest_path, force: true
     end
     # Install required external dependencies via virtualenv
-    if File.exist?(File.join(Dir.home, "/.config/gcloud/virtenv"))
-      puts "deleting existing virtual env before enabling virtual env with current Python version"
-      system_command "#{google_cloud_sdk_root}/bin/gcloud",
-                     args:      ["config", "virtualenv", "delete", "-q"],
-                     reset_uid: true
-    end
-    system_command  "#{google_cloud_sdk_root}/bin/gcloud",
-                    args:      ["config", "virtualenv", "create", "--python-to-use",
-                                "#{HOMEBREW_PREFIX}/opt/python@3.13/libexec/bin/python3"],
-                    reset_uid: true
-    system_command  "#{google_cloud_sdk_root}/bin/gcloud",
-                    args:      ["config", "virtualenv", "enable"],
-                    reset_uid: true
+    if File.exist?("#{HOMEBREW_PREFIX}/opt/python@3.13/libexec/bin/python3")
+      if File.exist?(File.join(Dir.home, "/.config/gcloud/virtenv"))
+        puts "deleting existing virtual env before enabling virtual env with current Python version"
+        system_command "#{google_cloud_sdk_root}/bin/gcloud",
+                       args:      ["config", "virtualenv", "delete", "-q"],
+                       reset_uid: true
+      end
 
-    system_command  "#{google_cloud_sdk_root}/bin/gcloud",
-                    args:      ["version"],
-                    reset_uid: true
+      system_command  "#{google_cloud_sdk_root}/bin/gcloud",
+                      args:      ["config", "virtualenv", "create", "--python-to-use",
+                                  "#{HOMEBREW_PREFIX}/opt/python@3.13/libexec/bin/python3"],
+                      reset_uid: true
+      system_command  "#{google_cloud_sdk_root}/bin/gcloud",
+                      args:      ["config", "virtualenv", "enable"],
+                      reset_uid: true
+
+      system_command  "#{google_cloud_sdk_root}/bin/gcloud",
+                      args:      ["version"],
+                      reset_uid: true
+      puts "this is the end of block"
+    else
+      puts <<~EOS
+        WARNING: Python version required by gcloud is not found. Installing required modules is skipped.
+          To resolve, ensure Python 3.13 is installed successfully by running:
+            $ brew uninstall --ignore-dependencies python@3.13
+            $ brew install python@3.13
+      EOS
+    end
+  rescue RuntimeError
+    puts <<~EOS
+      Error: installing required modules failed
+        For internal googlers, see go/gcloud-internal-auth.
+        For external users, run manually to install required modules:
+          $ gcloud virtualenv create --python-to-use "#{HOMEBREW_PREFIX}/opt/python@3.13/libexec/bin/python3"
+    EOS
   end
 
   uninstall trash: staged_path.dirname/"latest"
